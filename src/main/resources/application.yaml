@@ -30,8 +30,10 @@ spring:
     username: jira
     password: JiraRush
 
+
   liquibase:
     changeLog: "classpath:db/changelog.sql"
+
 
   # Jackson Fields Serialization
   jackson:

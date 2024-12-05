@@ -7,59 +7,68 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 
 @UtilityClass
 public class FileUtil {
-    private static final String ATTACHMENT_PATH = "./attachments/%s/";
+    private static final Path BASE_PATH = Paths.get("./attachments").toAbsolutePath().normalize();
 
-    public static void upload(MultipartFile multipartFile, String directoryPath, String fileName) {
-        if (multipartFile.isEmpty()) {
-            throw new IllegalRequestDataException("Select a file to upload.");
-        }
-
-        File dir = new File(directoryPath);
-        if (dir.exists() || dir.mkdirs()) {
-            File file = new File(directoryPath + fileName);
-            try (OutputStream outStream = new FileOutputStream(file)) {
-                outStream.write(multipartFile.getBytes());
-            } catch (IOException ex) {
-                throw new IllegalRequestDataException("Failed to upload file" + multipartFile.getOriginalFilename());
-            }
-        }
-    }
-
-    public static Resource download(String fileLink) {
-        Path path = Paths.get(fileLink);
+    static {
         try {
-            Resource resource = new UrlResource(path.toUri());
-            if (resource.exists() || resource.isReadable()) {
-                return resource;
-            } else {
-                throw new IllegalRequestDataException("Failed to download file " + resource.getFilename());
-            }
-        } catch (MalformedURLException ex) {
-            throw new NotFoundException("File" + fileLink + " not found");
+            Files.createDirectories(BASE_PATH); // Ensure base directory exists
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create base directory", e);
         }
     }
 
-    public static void delete(String fileLink) {
-        Path path = Paths.get(fileLink);
+
+    public static void upload(MultipartFile multipartFile, String directoryName, String fileName) {
         try {
-            Files.delete(path);
-        } catch (IOException ex) {
-            throw new IllegalRequestDataException("File" + fileLink + " deletion failed.");
+            Path directoryPath = BASE_PATH.resolve(directoryName).normalize();
+            Files.createDirectories(directoryPath); // Ensure directory exists
+
+            Path filePath = directoryPath.resolve(sanitizeFileName(fileName));
+            Files.write(filePath, multipartFile.getBytes(), StandardOpenOption.CREATE_NEW);
+
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to upload file: " + fileName, e);
         }
     }
 
-    public static String getPath(String titleType) {
-        return String.format(ATTACHMENT_PATH, titleType.toLowerCase());
+
+    public static Resource download(String filePath) {
+        try {
+            Path resolvedPath = BASE_PATH.resolve(filePath).normalize();
+            if (!Files.exists(resolvedPath) || !Files.isReadable(resolvedPath)) {
+                throw new RuntimeException("File not found or not readable: " + filePath);
+            }
+            return new UrlResource(resolvedPath.toUri());
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("Malformed file URL: " + filePath, e);
+        }
     }
+
+
+    public static void delete(String filePath) {
+        try {
+            Path resolvedPath = BASE_PATH.resolve(filePath).normalize();
+            Files.deleteIfExists(resolvedPath);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete file: " + filePath, e);
+        }
+    }
+
+    private static String sanitizeFileName(String fileName) {
+        return fileName.replaceAll("[^a-zA-Z0-9\\.\\-_]", "_");
+    }
+
+    public static Path getPath(String directoryName) {
+        return BASE_PATH.resolve(directoryName.toLowerCase()).normalize();
+    }
+
 }

@@ -2,7 +2,9 @@ package com.javarush.jira.bugtracking.sprint;
 
 import com.javarush.jira.MatcherFactory;
 import com.javarush.jira.bugtracking.sprint.to.SprintTo;
+import org.springframework.test.context.ActiveProfiles;
 
+@ActiveProfiles("test")
 public class SprintTestData {
     public static final MatcherFactory.Matcher<SprintTo> SPRINT_TO_MATCHER = MatcherFactory.usingIgnoringFieldsComparator(
             SprintTo.class, "enabled");

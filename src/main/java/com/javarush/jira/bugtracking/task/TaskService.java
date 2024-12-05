@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -39,6 +40,7 @@ public class TaskService {
     private final SprintRepository sprintRepository;
     private final TaskExtMapper extMapper;
     private final UserBelongRepository userBelongRepository;
+    private final ActivityRepository activityRepository;
 
     @Transactional
     public void changeStatus(long taskId, String statusCode) {
@@ -140,4 +142,35 @@ public class TaskService {
             throw new DataConflictException(String.format(assign ? CANNOT_ASSIGN : CANNOT_UN_ASSIGN, userType, task.getStatusCode()));
         }
     }
+
+    @Transactional(readOnly = true)
+    public Duration calculateTimeInProgress(long taskId) {
+        List<Activity> inProgressActivities = activityRepository.findAllByTaskIdAndStatusCodeOrderByUpdatedDesc(taskId, "in_progress");
+        List<Activity> readyForReviewActivities = activityRepository.findAllByTaskIdAndStatusCodeOrderByUpdatedDesc(taskId, "ready_for_review");
+
+        if (inProgressActivities.isEmpty() || readyForReviewActivities.isEmpty()) {
+            throw new IllegalArgumentException("Task does not have sufficient activity history for calculation.");
+        }
+
+        Activity lastInProgress = inProgressActivities.get(0);
+        Activity lastReadyForReview = readyForReviewActivities.get(0);
+
+        return Duration.between(lastInProgress.getUpdated(), lastReadyForReview.getUpdated());
+    }
+
+    @Transactional(readOnly = true)
+    public Duration calculateTimeInTesting(long taskId) {
+        List<Activity> readyForReviewActivities = activityRepository.findAllByTaskIdAndStatusCodeOrderByUpdatedDesc(taskId, "ready_for_review");
+        List<Activity> doneActivities = activityRepository.findAllByTaskIdAndStatusCodeOrderByUpdatedDesc(taskId, "done");
+
+        if (readyForReviewActivities.isEmpty() || doneActivities.isEmpty()) {
+            throw new IllegalArgumentException("Task does not have sufficient activity history for calculation.");
+        }
+
+        Activity lastReadyForReview = readyForReviewActivities.get(0);
+        Activity lastDone = doneActivities.get(0);
+
+        return Duration.between(lastReadyForReview.getUpdated(), lastDone.getUpdated());
+    }
+
 }
